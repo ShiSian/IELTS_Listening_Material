@@ -1,0 +1,44 @@
+anthropology
+archaeology
+astrology
+astronomy
+applied science
+general science
+biology
+microbiology
+environmental science
+life science
+economics
+economic history
+psychology
+psychological course
+time management
+money management
+literature
+School of Arts and Sciences
+computers
+philosophy
+survival course
+stress management
+sociology
+physiology
+planet science
+medical science
+geography
+chemistry
+law
+photojournalism
+linguistics
+psycholinguistics
+politics
+history
+physical education
+PE
+mathematics
+finance
+mass media
+statistics
+mining
+engineering
+architecture
+fine arts

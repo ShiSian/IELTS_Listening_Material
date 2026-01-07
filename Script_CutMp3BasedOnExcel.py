@@ -1,0 +1,191 @@
+import os
+import glob
+import openpyxl
+from pydub import AudioSegment, silence
+
+# ================= 导出指定Sheet的B列数据（仅导出未隐藏的行） ====================
+def export_specific_sheets(excel_path, target_sheets):
+    # 1. 检查文件是否存在
+    if not os.path.exists(excel_path):
+        print(f"错误：找不到文件 '{excel_path}'")
+        return
+
+    print(f"正在加载 Excel 文件: {excel_path} ... (文件较大时可能需要几秒)")
+
+    # 2. 加载工作簿
+    # data_only=True 确保读取的是计算后的数值而不是公式
+    try:
+        wb = openpyxl.load_workbook(excel_path, data_only=True)
+    except Exception as e:
+        print(f"无法打开Excel文件: {e}")
+        return
+
+    # 3. 遍历指定的 Sheet
+    for sheet_name in target_sheets:
+        if sheet_name not in wb.sheetnames:
+            print(f"⚠️  警告：Excel中找不到名为 '{sheet_name}' 的Sheet，已跳过。")
+            continue
+
+        ws = wb[sheet_name]
+        exported_data = []
+
+        print(f"正在处理 Sheet: {sheet_name} ...")
+
+        # 4. 遍历行 (从第3行开始)
+        # openpyxl 的 max_row 会获取已使用的最大行数
+        for row_idx in range(3, ws.max_row + 1):
+
+            # --- 核心逻辑：检查行是否被隐藏 ---
+            # ws.row_dimensions 存储了行的属性
+            # 如果 row_idx 在 row_dimensions 中且 hidden 为 True，则跳过
+            if row_idx in ws.row_dimensions and ws.row_dimensions[row_idx].hidden:
+                # 这一行是隐藏的，跳过
+                continue
+
+            # --- 读取 B 列数据 (Column 2) ---
+            cell_value = ws.cell(row=row_idx, column=2).value
+
+            # 如果单元格不为空，则加入列表
+            # 这里使用了 str() 确保数字也能被写入 txt
+            if cell_value is not None:
+                exported_data.append(str(cell_value))
+
+        # 5. 写入 TXT 文件
+        if exported_data:
+            txt_filename = f"Keep_{sheet_name}.txt"
+            try:
+                with open(txt_filename, 'w', encoding='utf-8') as f:
+                    f.write('\n'.join(exported_data))
+                print(f"✅ 成功导出: {txt_filename} (共 {len(exported_data)} 行数据)")
+            except Exception as e:
+                print(f"❌ 写入文件 {txt_filename} 失败: {e}")
+        else:
+            print(f"⚠️  Sheet '{sheet_name}' 没有可导出的有效数据（A3之后为空或全为隐藏行）。")
+
+    print("-" * 30)
+    print("所有任务完成。")
+    
+    
+def load_list(file_path):
+    if not os.path.exists(file_path):
+        return None
+    with open(file_path, 'r', encoding='utf-8') as f:
+        # 使用 strip() 去除换行符和首尾空格，并过滤空行
+        return [line.strip() for line in f if line.strip()]
+
+
+def process_single_unit(mp3_path):
+    base_name = os.path.splitext(mp3_path)[0]
+    full_txt =   f"Origin_{base_name}.txt"
+    keep_txt =   f"Keep_{base_name}.txt"
+    output_mp3 = f"Cutted_{base_name}.mp3"
+
+    if not os.path.exists(full_txt):
+        print(f"'{full_txt}' 不存在，跳过音频切割")
+        return
+
+    if not os.path.exists(keep_txt):
+        print(f"'{keep_txt}' 不存在，跳过音频切割")
+        return
+
+    print(f"\n>>> 正在处理: {mp3_path}")
+    full_list = load_list(full_txt)
+    keep_list = load_list(keep_txt)
+
+    audio = AudioSegment.from_mp3(mp3_path)
+
+    # 检测静音
+    nonsilent_ranges = silence.detect_nonsilent(
+        audio,
+        min_silence_len=800, # 保持较大值防止切断词组
+        silence_thresh=-45,
+        seek_step=5
+    )
+
+    print(f"  - 单词总数: {len(full_list)}")
+    print(f"  - 检测片段: {len(nonsilent_ranges)}")
+
+    start_idx = 0
+    word_map = {}
+    word_ranges = nonsilent_ranges[start_idx:]
+
+    for i in range(len(full_list)):
+        if i >= len(word_ranges):
+            print(f"  - ❌ 警告: 音频片段耗尽，单词 '{full_list[i]}' 及其后续单词无法匹配。")
+            break
+
+        current_word = full_list[i]
+        start = word_ranges[i][0]
+
+        # 确定切片终点：默认为下一个有效片段的起点（包含停顿）
+        # 如果是列表最后一个单词，或者由于杂音导致 ranges 后面还有多余的，
+        # 我们这里做一个保护：如果是full_list的最后一个词，直接取到文件末尾
+        if i == len(full_list) - 1:
+            chunk = audio[start:]
+        else:
+            # 正常情况：切到下一个对应的 ranges 起点
+            # 注意：这里我们用 word_ranges[i+1] 是安全的，因为我们是按 full_list 遍历的
+            if i + 1 < len(word_ranges):
+                next_start = word_ranges[i+1][0]
+                chunk = audio[start:next_start]
+            else:
+                # 极端情况：单词表还没完，但音频段用完了（前面情况C已经拦截，这里是双重保险）
+                chunk = audio[start:]
+
+        word_map[current_word] = chunk
+
+    # 合成导出
+    combined = AudioSegment.empty()
+    success_count = 0
+    missing_words = []
+
+    for word in keep_list:
+        if word in word_map:
+            combined += word_map[word]
+            success_count += 1
+        else:
+            missing_words.append(word)
+
+    if missing_words:
+        print(f"  - ⚠️ 以下单词未找到音频: {missing_words}")
+
+    if success_count > 0:
+        combined.export(output_mp3, format="mp3")
+        print(f"  - ✅ 成功导出: {output_mp3}")
+
+def main():
+    # 1、从Excel中导出需要keep的单词列表
+    my_excel_file = "王陆听力语料库.xlsx"
+    my_target_sheets = ["3.2"]
+    # ,
+    # "3.3-1", "3.3-2", "3.3-3", "3.3-4", "3.3-5", "3.3-6", "3.3-7", "3.3-8", "3.3-9",
+    # "4.2",
+    # "4.3-1", "4.3-2", "4.3-3", "4.4",
+    # "5.2",
+    # "5.3-1", "5.3-2", "5.3-3", "5.3-4", "5.3-5", "5.3-6",
+    # "5.3-7", "5.3-8", "5.3-9", "5.3-10", "5.3-11", "5.3-12",
+    # "11.1", "11.2", "11.3", "11.4",
+    # "8.2",
+    # "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5",
+    # "8.4-1", "8.4-2", "8.4-3",
+    # "8.5",
+    # "8.6-1", "8.6-2", "8.6-3",
+    # "8.7-1", "8.7-2", "8.7-3",
+    # "8.8"
+    export_specific_sheets(my_excel_file, my_target_sheets)
+
+    # 2、基于keep单词列表切割mp3
+    mp3_files = glob.glob("*.mp3")
+    for mp3 in mp3_files:
+        # 跳过已经处理过的文件
+        if "Cutted_" in mp3:
+            continue
+        # 检查文件名是否包含 my_target_sheets 中的任意一个章节号
+        # 例如：如果 mp3 是 "3.2.mp3" 且 "3.2" 在列表中，则处理
+        if not any(sheet in mp3 for sheet in my_target_sheets):
+            continue
+        # 进行音频文件的切割    
+        process_single_unit(mp3)
+
+if __name__ == "__main__":
+    main()
