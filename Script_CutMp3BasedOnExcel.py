@@ -242,7 +242,7 @@ def main():
     my_target_sheet05 = ["5.2", "5.3-1", "5.3-2", "5.3-3", "5.3-4", "5.3-5", "5.3-6", "5.3-7", "5.3-8", "5.3-9", "5.3-10", "5.3-11", "5.3-12"]
     my_target_sheet08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
     my_target_sheet11 = ["11.1", "11.2", "11.3", "11.4"]
-    my_target_sheets  = my_target_sheet03
+    my_target_sheets  = my_target_sheet04
     my_target_columns = ["F", "H", "J"]
     hide_completed_rows(my_excel_file, my_target_sheets, my_target_columns)
     
