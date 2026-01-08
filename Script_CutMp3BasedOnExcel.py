@@ -2,6 +2,9 @@ import os
 import glob
 import openpyxl
 from pydub import AudioSegment, silence
+from openpyxl.utils import column_index_from_string
+
+
 
 # ================= 导出指定Sheet的B列数据（仅导出未隐藏的行） ====================
 def export_specific_sheets(excel_path, target_sheets):
@@ -153,28 +156,100 @@ def process_single_unit(mp3_path):
         combined.export(output_mp3, format="mp3")
         print(f"  - ✅ 成功导出: {output_mp3}")
 
+def hide_completed_rows(file_name, target_sheets, target_columns):
+    """
+    遍历指定Sheet和列，隐藏满足条件的行。
+    条件：指定列中 ( "√"的数量 + 空单元格数量 ) == 指定列的总数
+    """
+
+    # 检查文件是否存在
+    if not os.path.exists(file_name):
+        print(f"[Error] 文件未找到: {file_name}")
+        return
+
+    print(f"正在处理文件: {file_name}...")
+
+    try:
+        # 1. 加载用于【读取值】的工作簿 (data_only=True 获取公式计算结果)
+        # 警告：必须确保Excel文件此前已被Excel保存过，否则公式的缓存值可能为空
+        wb_reader = openpyxl.load_workbook(file_name, data_only=True)
+
+        # 2. 加载用于【修改属性】的工作簿 (保留公式)
+        wb_writer = openpyxl.load_workbook(file_name)
+    except PermissionError:
+        print("[Error] 无法打开文件。请确保Excel文件已关闭。")
+        return
+
+    # 将列字母转换为索引 (例如 "B" -> 2)
+    target_col_indices = [column_index_from_string(c) for c in target_columns]
+    target_count = len(target_columns)
+
+    for sheet_name in target_sheets:
+        if sheet_name not in wb_reader.sheetnames:
+            print(f"[Warning] Sheet '{sheet_name}' 不存在，跳过。")
+            continue
+
+        print(f"正在处理 Sheet: {sheet_name}")
+
+        # 获取对应的两个sheet对象
+        ws_read = wb_reader[sheet_name]
+        ws_write = wb_writer[sheet_name]
+
+        # 从第3行开始遍历
+        # 注意：max_row 获取的是最大有效行数
+        current_max_row = ws_read.max_row
+
+        rows_hidden_count = 0
+
+        for row_idx in range(3, current_max_row + 1):
+            match_counter = 0
+
+            # 遍历指定的列
+            for col_idx in target_col_indices:
+                # 获取单元格的值（公式计算后的值）
+                cell_value = ws_read.cell(row=row_idx, column=col_idx).value
+
+                # 数据清洗：转字符串并去除首尾空格，处理None
+                str_value = str(cell_value).strip() if cell_value is not None else ""
+
+                # 判定条件：是 "√" 或者是 空
+                if str_value == "√" or str_value == "":
+                    match_counter += 1
+
+            # 如果符合条件的数量等于列的总数，说明全满足，隐藏该行
+            if match_counter == target_count:
+                ws_write.row_dimensions[row_idx].hidden = True
+                rows_hidden_count += 1
+
+        print(f"  -> Sheet '{sheet_name}' 处理完毕，隐藏了 {rows_hidden_count} 行。")
+
+    # 保存文件
+    try:
+        wb_writer.save(file_name)
+        print("所有操作完成，文件已保存。")
+    except PermissionError:
+        print("[Error] 保存失败。请确保Excel文件已关闭。")
+        
+        
+    
+
+
 def main():
-    # 1、从Excel中导出需要keep的单词列表
+    # 1、隐藏不需要keep的行
     my_excel_file = "王陆听力语料库.xlsx"
-    my_target_sheets = ["3.2"]
-    # ,
-    # "3.3-1", "3.3-2", "3.3-3", "3.3-4", "3.3-5", "3.3-6", "3.3-7", "3.3-8", "3.3-9",
-    # "4.2",
-    # "4.3-1", "4.3-2", "4.3-3", "4.4",
-    # "5.2",
-    # "5.3-1", "5.3-2", "5.3-3", "5.3-4", "5.3-5", "5.3-6",
-    # "5.3-7", "5.3-8", "5.3-9", "5.3-10", "5.3-11", "5.3-12",
-    # "11.1", "11.2", "11.3", "11.4",
-    # "8.2",
-    # "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5",
-    # "8.4-1", "8.4-2", "8.4-3",
-    # "8.5",
-    # "8.6-1", "8.6-2", "8.6-3",
-    # "8.7-1", "8.7-2", "8.7-3",
-    # "8.8"
+    my_target_sheet03 = ["3.2","3.3-1", "3.3-2", "3.3-3", "3.3-4", "3.3-5", "3.3-6", "3.3-7", "3.3-8", "3.3-9"]
+    my_target_sheet04 = ["4.2", "4.3-1", "4.3-2", "4.3-3", "4.4"]
+    my_target_sheet05 = ["5.2", "5.3-1", "5.3-2", "5.3-3", "5.3-4", "5.3-5", "5.3-6", "5.3-7", "5.3-8", "5.3-9", "5.3-10", "5.3-11", "5.3-12"]
+    my_target_sheet08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
+    my_target_sheet11 = ["11.1", "11.2", "11.3", "11.4"]
+    my_target_sheets  = my_target_sheet03
+    my_target_columns = ["F", "H", "J"]
+    hide_completed_rows(my_excel_file, my_target_sheets, my_target_columns)
+    
+    # 2、从Excel中导出需要keep的单词列表
     export_specific_sheets(my_excel_file, my_target_sheets)
 
-    # 2、基于keep单词列表切割mp3
+    # 3、基于keep单词列表切割mp3
     mp3_files = glob.glob("*.mp3")
     for mp3 in mp3_files:
         # 跳过已经处理过的文件
