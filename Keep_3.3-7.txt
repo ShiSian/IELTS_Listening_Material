@@ -2,7 +2,6 @@ precision
 preference
 prescription
 presentation
-preservation
 prevention
 privacy
 prize
@@ -12,8 +11,6 @@ protein
 psychiatrist
 psychologist
 psychotherapy
-rank
-rat
 rate
 reflectance
 residence
@@ -21,5 +18,3 @@ response
 restaurant
 retirement
 return
-rice
-role

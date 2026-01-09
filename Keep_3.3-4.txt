@@ -1,16 +1,10 @@
 faculty
-fan
-feast
 field
 figure
 firms
 flourish
 flow
 fortune
-fruit
-gasoline
-gender
-gold
 golf
 grain
 grass
@@ -18,5 +12,4 @@ green
 growth
 guest
 headache
-horse
 households

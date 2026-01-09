@@ -3,6 +3,7 @@ import glob
 import openpyxl
 from pydub import AudioSegment, silence
 from openpyxl.utils import column_index_from_string
+import win32com.client as win32  # 用于调用 Excel 引擎
 
 
 
@@ -67,15 +68,13 @@ def export_specific_sheets(excel_path, target_sheets):
 
     print("-" * 30)
     print("所有任务完成。")
-    
-    
+     
 def load_list(file_path):
     if not os.path.exists(file_path):
         return None
     with open(file_path, 'r', encoding='utf-8') as f:
         # 使用 strip() 去除换行符和首尾空格，并过滤空行
         return [line.strip() for line in f if line.strip()]
-
 
 def process_single_unit(mp3_path):
     base_name = os.path.splitext(mp3_path)[0]
@@ -156,80 +155,114 @@ def process_single_unit(mp3_path):
         combined.export(output_mp3, format="mp3")
         print(f"  - ✅ 成功导出: {output_mp3}")
 
-def hide_completed_rows(file_name, target_sheets, target_columns):
-    """
-    遍历指定Sheet和列，隐藏满足条件的行。
-    条件：指定列中 ( "√"的数量 + 空单元格数量 ) == 指定列的总数
-    """
-
-    # 检查文件是否存在
-    if not os.path.exists(file_name):
-        print(f"[Error] 文件未找到: {file_name}")
-        return
-
-    print(f"正在处理文件: {file_name}...")
-
+def refresh_excel_formulas(file_path):
+    """使用 Excel 软件打开并保存，以强制更新公式缓存"""
+    abs_path = os.path.abspath(file_path)
+    excel = win32.gencache.EnsureDispatch('Excel.Application')
+    excel.Visible = False
+    excel.DisplayAlerts = False
     try:
-        # 1. 加载用于【读取值】的工作簿 (data_only=True 获取公式计算结果)
-        # 警告：必须确保Excel文件此前已被Excel保存过，否则公式的缓存值可能为空
-        wb_reader = openpyxl.load_workbook(file_name, data_only=True)
+        wb = excel.Workbooks.Open(abs_path)
+        wb.Save()
+        wb.Close()
+        print(f">>> 公式缓存已刷新")
+    except Exception as e:
+        print(f"[Error] 刷新公式失败: {e}")
+    finally:
+        excel.Quit()
 
-        # 2. 加载用于【修改属性】的工作簿 (保留公式)
-        wb_writer = openpyxl.load_workbook(file_name)
-    except PermissionError:
-        print("[Error] 无法打开文件。请确保Excel文件已关闭。")
+"""
+根据规则隐藏指定Sheet的指定行
+"""
+def hide_completed_rows(file_name, target_sheets, target_columns):
+    if not os.path.exists(file_name):
         return
 
-    # 将列字母转换为索引 (例如 "B" -> 2)
+    # ---------- 第一阶段：重置 ----------
+    try:
+        wb_reset = openpyxl.load_workbook(file_name)
+        for sheet_name in target_sheets:
+            if sheet_name in wb_reset.sheetnames:
+                ws = wb_reset[sheet_name]
+                for r in range(1, ws.max_row + 1):
+                    ws.row_dimensions[r].hidden = False
+                ws.auto_filter.ref = None
+        wb_reset.save(file_name)
+        wb_reset.close()
+    except PermissionError:
+        print("[Error] 文件被占用，无法重置。")
+        return
+
+    # ---------- 第二阶段：判定 ----------
+    try:
+        wb_reader = openpyxl.load_workbook(file_name, data_only=True)
+        wb_writer = openpyxl.load_workbook(file_name)
+    except Exception as e:
+        print(f"重新加载失败: {e}")
+        return
+
     target_col_indices = [column_index_from_string(c) for c in target_columns]
-    target_count = len(target_columns)
+
+    # === 等价于 Excel 公式的 Python 计算 ===
+    def calc_formula_equivalent(ws, row):
+        """
+        等价于：
+        =IF(Gx="", "", IF(OR(Gx=Bx, Gx=Cx), "√", Bx & "|" & Cx & ">" & Dx))
+        """
+        def norm(v):
+            return "" if v is None else str(v).strip()
+
+        b = norm(ws[f"B{row}"].value)
+        c = norm(ws[f"C{row}"].value)
+        d = norm(ws[f"D{row}"].value)
+        g = norm(ws[f"G{row}"].value)
+
+        if g == "":
+            return ""
+        if g == b or g == c:
+            return "√"
+        return f"{b}|{c}>{d}"
 
     for sheet_name in target_sheets:
         if sheet_name not in wb_reader.sheetnames:
-            print(f"[Warning] Sheet '{sheet_name}' 不存在，跳过。")
             continue
 
-        print(f"正在处理 Sheet: {sheet_name}")
-
-        # 获取对应的两个sheet对象
         ws_read = wb_reader[sheet_name]
         ws_write = wb_writer[sheet_name]
 
-        # 从第3行开始遍历
-        # 注意：max_row 获取的是最大有效行数
-        current_max_row = ws_read.max_row
-
         rows_hidden_count = 0
+        max_row = ws_read.max_row
 
-        for row_idx in range(3, current_max_row + 1):
+        for row_idx in range(3, max_row + 1):
             match_counter = 0
 
-            # 遍历指定的列
             for col_idx in target_col_indices:
-                # 获取单元格的值（公式计算后的值）
-                cell_value = ws_read.cell(row=row_idx, column=col_idx).value
+                cell = ws_read.cell(row=row_idx, column=col_idx)
+                cell_value = cell.value
 
-                # 数据清洗：转字符串并去除首尾空格，处理None
+                # 如果 Excel 没有缓存公式结果 → 自己算
+                if cell_value is None:
+                    cell_value = calc_formula_equivalent(ws_read, row_idx)
+
                 str_value = str(cell_value).strip() if cell_value is not None else ""
 
-                # 判定条件：是 "√" 或者是 空
                 if str_value == "√" or str_value == "":
                     match_counter += 1
 
-            # 如果符合条件的数量等于列的总数，说明全满足，隐藏该行
-            if match_counter == target_count:
+            if match_counter == len(target_col_indices):
                 ws_write.row_dimensions[row_idx].hidden = True
                 rows_hidden_count += 1
 
         print(f"  -> Sheet '{sheet_name}' 处理完毕，隐藏了 {rows_hidden_count} 行。")
 
-    # 保存文件
     try:
         wb_writer.save(file_name)
-        print("所有操作完成，文件已保存。")
+        print(">>> 任务最终完成！")
     except PermissionError:
-        print("[Error] 保存失败。请确保Excel文件已关闭。")
-        
+        print("[Error] 保存最终结果失败。")
+
+
+ 
         
     
 
@@ -248,7 +281,7 @@ def main():
     my_target_sheets  = my_target_sheet03 + my_target_sheet04
     # 告诉程序基于哪几列的值来判断是否需要隐藏对应行（比如FGH表示如果在一行中FGH列的值都是√或者为空<表示本次不需要听写>，则隐藏该行）
     # 【这里可能需要修改】
-    my_target_columns = ["F", "H", "J"]
+    my_target_columns = ["F", "H"]
     # 执行隐藏操作
     hide_completed_rows(my_excel_file, my_target_sheets, my_target_columns)
     
