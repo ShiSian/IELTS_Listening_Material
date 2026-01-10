@@ -3,7 +3,7 @@ import glob
 import openpyxl
 from pydub import AudioSegment, silence
 from openpyxl.utils import column_index_from_string
-import win32com.client as win32  # 用于调用 Excel 引擎
+# import win32com.client as win32  # 用于调用 Excel 引擎
 
 
 
@@ -155,24 +155,8 @@ def process_single_unit(mp3_path):
         combined.export(output_mp3, format="mp3")
         print(f"  - ✅ 成功导出: {output_mp3}")
 
-def refresh_excel_formulas(file_path):
-    """使用 Excel 软件打开并保存，以强制更新公式缓存"""
-    abs_path = os.path.abspath(file_path)
-    excel = win32.gencache.EnsureDispatch('Excel.Application')
-    excel.Visible = False
-    excel.DisplayAlerts = False
-    try:
-        wb = excel.Workbooks.Open(abs_path)
-        wb.Save()
-        wb.Close()
-        print(f">>> 公式缓存已刷新")
-    except Exception as e:
-        print(f"[Error] 刷新公式失败: {e}")
-    finally:
-        excel.Quit()
-
 """
-根据规则隐藏指定Sheet的指定行
+@brief 根据规则隐藏指定Sheet的指定行
 """
 def hide_completed_rows(file_name, target_sheets, target_columns):
     if not os.path.exists(file_name):
@@ -278,7 +262,7 @@ def main():
     my_target_sheet08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
     my_target_sheet11 = ["11.1", "11.2", "11.3", "11.4"]
     # 告诉程序需要处理哪些单元表【这里可能需要修改，当然如果这里把所有章节都加起来就会全量处理整个表格】
-    my_target_sheets  = my_target_sheet03 + my_target_sheet04
+    my_target_sheets  = my_target_sheet11
     # 告诉程序基于哪几列的值来判断是否需要隐藏对应行（比如FGH表示如果在一行中FGH列的值都是√或者为空<表示本次不需要听写>，则隐藏该行）
     # 【这里可能需要修改】
     my_target_columns = ["F", "H"]
