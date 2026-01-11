@@ -1,9 +1,7 @@
-import os
-import glob
-import openpyxl
 from pydub import AudioSegment, silence
+import os
+import openpyxl
 from openpyxl.utils import column_index_from_string
-# import win32com.client as win32  # 用于调用 Excel 引擎
 
 
 
@@ -162,24 +160,28 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
     if not os.path.exists(file_name):
         return
 
-    # ---------- 第一阶段：重置 ----------
+    # ---------- 第一阶段：重置 (取消隐藏) ----------
     try:
         wb_reset = openpyxl.load_workbook(file_name)
         for sheet_name in target_sheets:
             if sheet_name in wb_reset.sheetnames:
                 ws = wb_reset[sheet_name]
+                # 取消隐藏所有行
                 for r in range(1, ws.max_row + 1):
                     ws.row_dimensions[r].hidden = False
+                # 清除筛选器
                 ws.auto_filter.ref = None
         wb_reset.save(file_name)
         wb_reset.close()
     except PermissionError:
-        print("[Error] 文件被占用，无法重置。")
+        print("[Error] 文件被占用，无法重置。请关闭 Excel 后重试。")
         return
 
-    # ---------- 第二阶段：判定 ----------
+    # ---------- 第二阶段：判定并隐藏 ----------
     try:
+        # data_only=True 用于读取公式计算后的值（如果有缓存）
         wb_reader = openpyxl.load_workbook(file_name, data_only=True)
+        # 普通模式用于写入隐藏属性（保留公式）
         wb_writer = openpyxl.load_workbook(file_name)
     except Exception as e:
         print(f"重新加载失败: {e}")
@@ -187,26 +189,41 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
 
     target_col_indices = [column_index_from_string(c) for c in target_columns]
 
-    # === 等价于 Excel 公式的 Python 计算 ===
-    def calc_formula_equivalent(ws, row):
+    # === 修正后的等价计算函数 ===
+    def calc_formula_equivalent(ws, row, formula_col_idx):
         """
-        等价于：
-        =IF(Gx="", "", IF(OR(Gx=Bx, Gx=Cx), "√", Bx & "|" & Cx & ">" & Dx))
+        手动模拟 Excel 公式逻辑。
+        
+        假设逻辑：
+        用户在 '公式列的左边一列' 输入内容。
+        公式判断：IF(输入内容 == B列 OR 输入内容 == C列, "√", 错误提示)
         """
         def norm(v):
             return "" if v is None else str(v).strip()
 
+        # 1. 获取标准答案 (B列:单词, C列:美音/解释, D列:中文)
         b = norm(ws[f"B{row}"].value)
         c = norm(ws[f"C{row}"].value)
         d = norm(ws[f"D{row}"].value)
-        g = norm(ws[f"G{row}"].value)
 
-        if g == "":
+        # 2. 获取用户输入值 (关键修改：读取公式列左侧的单元格)
+        # 假设公式在 G 列 (index 7)，则输入在 F 列 (index 6)
+        input_col_idx = formula_col_idx - 1
+        user_input_val = ws.cell(row=row, column=input_col_idx).value
+        user_input = norm(user_input_val)
+
+        # 3. 逻辑判断
+        if user_input == "":
             return ""
-        if g == b or g == c:
+
+        # 如果输入内容等于 B列 或 C列，则视为正确
+        if user_input == b or user_input == c:
             return "√"
+
+        # 否则返回错误提示格式
         return f"{b}|{c}>{d}"
 
+    # 开始遍历处理
     for sheet_name in target_sheets:
         if sheet_name not in wb_reader.sheetnames:
             continue
@@ -217,22 +234,26 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
         rows_hidden_count = 0
         max_row = ws_read.max_row
 
+        # 从第3行开始（避开表头）
         for row_idx in range(3, max_row + 1):
             match_counter = 0
 
             for col_idx in target_col_indices:
+                # 读取公式单元格的值 (data_only=True)
                 cell = ws_read.cell(row=row_idx, column=col_idx)
                 cell_value = cell.value
 
-                # 如果 Excel 没有缓存公式结果 → 自己算
+                # 如果 Excel 没有缓存公式结果 (即 cell_value 为 None)，则调用 Python 函数手动计算
                 if cell_value is None:
-                    cell_value = calc_formula_equivalent(ws_read, row_idx)
+                    cell_value = calc_formula_equivalent(ws_read, row_idx, col_idx)
 
+                # 格式化结果
                 str_value = str(cell_value).strip() if cell_value is not None else ""
 
                 if str_value == "√" or str_value == "":
                     match_counter += 1
 
+            # 如果所有目标列都判定为 "√"，则隐藏该行
             if match_counter == len(target_col_indices):
                 ws_write.row_dimensions[row_idx].hidden = True
                 rows_hidden_count += 1
@@ -243,7 +264,7 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
         wb_writer.save(file_name)
         print(">>> 任务最终完成！")
     except PermissionError:
-        print("[Error] 保存最终结果失败。")
+        print("[Error] 保存最终结果失败，请检查文件是否未关闭。")
 
 
  
@@ -262,28 +283,28 @@ def main():
     my_target_sheet08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
     my_target_sheet11 = ["11.1", "11.2", "11.3", "11.4"]
     # 告诉程序需要处理哪些单元表【这里可能需要修改，当然如果这里把所有章节都加起来就会全量处理整个表格】
-    my_target_sheets  = my_target_sheet11
+    my_target_sheets  = my_target_sheet03 + my_target_sheet04
     # 告诉程序基于哪几列的值来判断是否需要隐藏对应行（比如FGH表示如果在一行中FGH列的值都是√或者为空<表示本次不需要听写>，则隐藏该行）
     # 【这里可能需要修改】
-    my_target_columns = ["F", "H"]
+    my_target_columns = ["N", "P"]
     # 执行隐藏操作
     hide_completed_rows(my_excel_file, my_target_sheets, my_target_columns)
     
-    # 2、从Excel中导出需要keep的单词列表
-    export_specific_sheets(my_excel_file, my_target_sheets)
-
-    # 3、基于keep单词列表切割mp3
-    mp3_files = glob.glob("*.mp3")
-    for mp3 in mp3_files:
-        # 跳过已经处理过的文件
-        if "Cutted_" in mp3:
-            continue
-        # 检查文件名是否包含 my_target_sheets 中的任意一个章节号
-        # 例如：如果 mp3 是 "3.2.mp3" 且 "3.2" 在列表中，则处理
-        if not any(sheet in mp3 for sheet in my_target_sheets):
-            continue
-        # 进行音频文件的切割    
-        process_single_unit(mp3)
+    # # 2、从Excel中导出需要keep的单词列表
+    # export_specific_sheets(my_excel_file, my_target_sheets)
+    # 
+    # # 3、基于keep单词列表切割mp3
+    # mp3_files = glob.glob("*.mp3")
+    # for mp3 in mp3_files:
+    #     # 跳过已经处理过的文件
+    #     if "Cutted_" in mp3:
+    #         continue
+    #     # 检查文件名是否包含 my_target_sheets 中的任意一个章节号
+    #     # 例如：如果 mp3 是 "3.2.mp3" 且 "3.2" 在列表中，则处理
+    #     if not any(sheet in mp3 for sheet in my_target_sheets):
+    #         continue
+    #     # 进行音频文件的切割    
+    #     process_single_unit(mp3)
 
 if __name__ == "__main__":
     main()
