@@ -1,3 +1,5 @@
+import glob
+
 from pydub import AudioSegment, silence
 import os
 import openpyxl
@@ -217,7 +219,7 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
             return ""
 
         # 如果输入内容等于 B列 或 C列，则视为正确
-        if user_input == b or user_input == c:
+        if user_input.lower() == b.lower() or user_input.lower() == c.lower():
             return "√"
 
         # 否则返回错误提示格式
@@ -239,13 +241,8 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
             match_counter = 0
 
             for col_idx in target_col_indices:
-                # 读取公式单元格的值 (data_only=True)
-                cell = ws_read.cell(row=row_idx, column=col_idx)
-                cell_value = cell.value
-
-                # 如果 Excel 没有缓存公式结果 (即 cell_value 为 None)，则调用 Python 函数手动计算
-                if cell_value is None:
-                    cell_value = calc_formula_equivalent(ws_read, row_idx, col_idx)
+                # 调用 Python 函数手动计算
+                cell_value = calc_formula_equivalent(ws_read, row_idx, col_idx)
 
                 # 格式化结果
                 str_value = str(cell_value).strip() if cell_value is not None else ""
@@ -283,28 +280,26 @@ def main():
     my_target_sheet08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
     my_target_sheet11 = ["11.1", "11.2", "11.3", "11.4"]
     # 告诉程序需要处理哪些单元表【这里可能需要修改，当然如果这里把所有章节都加起来就会全量处理整个表格】
-    my_target_sheets  = my_target_sheet03 + my_target_sheet04
+    my_target_sheets  = ["5.3-1"]
     # 告诉程序基于哪几列的值来判断是否需要隐藏对应行（比如FGH表示如果在一行中FGH列的值都是√或者为空<表示本次不需要听写>，则隐藏该行）
     # 【这里可能需要修改】
-    my_target_columns = ["N", "P"]
+    my_target_columns = ["H", "J"]
     # 执行隐藏操作
     hide_completed_rows(my_excel_file, my_target_sheets, my_target_columns)
     
-    # # 2、从Excel中导出需要keep的单词列表
-    # export_specific_sheets(my_excel_file, my_target_sheets)
-    # 
-    # # 3、基于keep单词列表切割mp3
-    # mp3_files = glob.glob("*.mp3")
-    # for mp3 in mp3_files:
-    #     # 跳过已经处理过的文件
-    #     if "Cutted_" in mp3:
-    #         continue
-    #     # 检查文件名是否包含 my_target_sheets 中的任意一个章节号
-    #     # 例如：如果 mp3 是 "3.2.mp3" 且 "3.2" 在列表中，则处理
-    #     if not any(sheet in mp3 for sheet in my_target_sheets):
-    #         continue
-    #     # 进行音频文件的切割    
-    #     process_single_unit(mp3)
+    # 2、从Excel中导出需要keep的单词列表
+    export_specific_sheets(my_excel_file, my_target_sheets)
+
+    # 3、基于keep单词列表切割mp3
+    all_files = os.listdir('.')
+    for filename in all_files:
+        if not filename.lower().endswith('.mp3'):
+            continue
+        file_base_name = os.path.splitext(filename)[0]
+        if file_base_name not in my_target_sheets:
+            continue
+        print(f"正在处理匹配的文件: {filename}")
+        process_single_unit(filename)
 
 if __name__ == "__main__":
     main()
