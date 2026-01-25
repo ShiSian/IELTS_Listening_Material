@@ -113,9 +113,9 @@ def process_single_unit(filename):
     # 检测静音
     nonsilent_ranges = silence.detect_nonsilent(
         audio,
-        min_silence_len=800, # 保持较大值防止切断词组
-        silence_thresh=-45,
-        seek_step=5
+        min_silence_len=1500, # 只有停顿超过1500ms才切分，防止误切单词内部（如辅音爆破音导致的微小停顿）
+        silence_thresh=-45,   # 音量低于-45dBFS时认定为静音，需根据录音底噪大小调整（一般-40到-50之间）
+        seek_step=5           # 每隔5ms扫描一次，较小的值能提高切点精度，但会略微增加计算开销
     )
 
     print(f"  - 单词总数: {len(full_list)}")
