@@ -4,8 +4,13 @@ from pydub import AudioSegment, silence
 import os
 import openpyxl
 from openpyxl.utils import column_index_from_string
+from soupsieve.css_match import DIR_FLAGS
 
-
+# 文件夹配置
+DIR_ORIGIN_AUDIO = "OriginAudio"  # 存放原始 MP3 文件的文件夹
+DIR_ORIGIN_WORDS = "OriginWords"    # 存放 Origin_*.txt 的文件夹
+DIR_INTERMEDIATE = "Intermediate" # 存放 Keep_*.txt 的文件夹
+DIR_OUTPUT       = "Output"           # 存放生成结果的文件夹
 
 # ================= 导出指定Sheet的B列数据（仅导出未隐藏的行） ====================
 def export_specific_sheets(excel_path, target_sheets):
@@ -56,7 +61,9 @@ def export_specific_sheets(excel_path, target_sheets):
 
         # 5. 写入 TXT 文件
         if exported_data:
-            txt_filename = f"Keep_{sheet_name}.txt"
+            # 确保 Intermediate 文件夹存在
+            os.makedirs("Intermediate", exist_ok=True)
+            txt_filename = os.path.join("Intermediate", f"Keep_{sheet_name}.txt")
             try:
                 with open(txt_filename, 'w', encoding='utf-8') as f:
                     f.write('\n'.join(exported_data))
@@ -76,11 +83,18 @@ def load_list(file_path):
         # 使用 strip() 去除换行符和首尾空格，并过滤空行
         return [line.strip() for line in f if line.strip()]
 
-def process_single_unit(mp3_path):
-    base_name = os.path.splitext(mp3_path)[0]
-    full_txt =   f"Origin_{base_name}.txt"
-    keep_txt =   f"Keep_{base_name}.txt"
-    output_mp3 = f"Cutted_{base_name}.mp3"
+def process_single_unit(filename):
+    # 1. 提取不带后缀的名称 (例如 "D1S1.mp3" -> "D1S1")
+    base_name = os.path.splitext(filename)[0]
+
+    # 使用全局变量构建路径
+    mp3_path   = os.path.join(DIR_ORIGIN_AUDIO, f"{base_name}.mp3")
+    full_txt   = os.path.join(DIR_ORIGIN_WORDS, f"{base_name}.txt")
+    keep_txt   = os.path.join(DIR_INTERMEDIATE, f"Keep_{base_name}.txt")
+    output_mp3 = os.path.join(DIR_OUTPUT,       f"Cutted_{base_name}.mp3")
+
+    # 自动创建输出文件夹（如果不存在）
+    os.makedirs(DIR_OUTPUT, exist_ok=True)
 
     if not os.path.exists(full_txt):
         print(f"'{full_txt}' 不存在，跳过音频切割")
@@ -272,7 +286,7 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
 def main():
     # 1、隐藏不需要keep的行
     # 告诉程序操作哪个Excel文件
-    my_excel_file = "王陆听力语料库.xlsx"
+    my_excel_file = "Jayden.xlsx"
     # 内置的按照章节的单元表名称
     my_target_sheet03 = ["3.2","3.3-1", "3.3-2", "3.3-3", "3.3-4", "3.3-5", "3.3-6", "3.3-7", "3.3-8", "3.3-9"]
     my_target_sheet04 = ["4.2", "4.3-1", "4.3-2", "4.3-3", "4.4"]
@@ -280,25 +294,56 @@ def main():
     my_target_sheet08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
     my_target_sheet11 = ["11.1", "11.2", "11.3", "11.4"]
     # 告诉程序需要处理哪些单元表【这里可能需要修改，当然如果这里把所有章节都加起来就会全量处理整个表格】
-    my_target_sheets  = ["5.3-1"]
+    my_target_sheets  = ["D1S1"]
     # 告诉程序基于哪几列的值来判断是否需要隐藏对应行（比如FGH表示如果在一行中FGH列的值都是√或者为空<表示本次不需要听写>，则隐藏该行）
     # 【这里可能需要修改】
-    my_target_columns = ["H", "J"]
+    my_target_columns = ["F", "H"]
     # 执行隐藏操作
     hide_completed_rows(my_excel_file, my_target_sheets, my_target_columns)
     
     # 2、从Excel中导出需要keep的单词列表
     export_specific_sheets(my_excel_file, my_target_sheets)
 
-    # 3、基于keep单词列表切割mp3
-    all_files = os.listdir('.')
+    # # 3、基于keep单词列表切割mp3
+    # audio_dir = "OriginAudio"
+    # # 检查文件夹是否存在，避免报错
+    # if not os.path.exists(audio_dir):
+    #     print(f"错误：找不到文件夹 '{audio_dir}'")
+    #     return
+    # all_files = os.listdir(audio_dir)
+    # for filename in all_files:
+    #     if not filename.lower().endswith('.mp3'):
+    #         continue
+    #     file_base_name = os.path.splitext(filename)[0]
+    #     if file_base_name not in my_target_sheets:
+    #         continue
+    #     # 拼接完整路径：OriginAudio/文件名.mp3
+    #     full_path = os.path.join(audio_dir, filename)
+    #     print(f"正在处理匹配的文件: {full_path}")
+    #     # 注意：这里需要确保 process_single_unit 函数能接受完整路径
+    #     process_single_unit(full_path)
+    # 3、基于 keep 单词列表切割 mp3
+    # 检查原始音频文件夹是否存在
+    if not os.path.exists(DIR_ORIGIN_AUDIO):
+        print(f"❌ 错误：找不到原始音频文件夹 '{DIR_ORIGIN_AUDIO}'")
+        return
+
+    # 获取文件夹内所有文件
+    all_files = os.listdir(DIR_ORIGIN_AUDIO)
+
+    # 过滤出需要处理的 MP3
     for filename in all_files:
+        # 只处理 .mp3 后缀
         if not filename.lower().endswith('.mp3'):
             continue
+
         file_base_name = os.path.splitext(filename)[0]
+
+        # 匹配当前的 Sheet 名称（确保只处理本次指定的章节）
         if file_base_name not in my_target_sheets:
             continue
-        print(f"正在处理匹配的文件: {filename}")
+
+        # 调用处理函数
         process_single_unit(filename)
 
 if __name__ == "__main__":
