@@ -284,65 +284,74 @@ def hide_completed_rows(file_name, target_sheets, target_columns):
 
 
 def main():
-    # 1、隐藏不需要keep的行
-    # 告诉程序操作哪个Excel文件
-    my_excel_file = "Jayden.xlsx"
-    # 内置的按照章节的单元表名称
-    my_target_sheet03 = ["3.2","3.3-1", "3.3-2", "3.3-3", "3.3-4", "3.3-5", "3.3-6", "3.3-7", "3.3-8", "3.3-9"]
-    my_target_sheet04 = ["4.2", "4.3-1", "4.3-2", "4.3-3", "4.4"]
-    my_target_sheet05 = ["5.2", "5.3-1", "5.3-2", "5.3-3", "5.3-4", "5.3-5", "5.3-6", "5.3-7", "5.3-8", "5.3-9", "5.3-10", "5.3-11", "5.3-12"]
-    my_target_sheet08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
-    my_target_sheet11 = ["11.1", "11.2", "11.3", "11.4"]
-    # 告诉程序需要处理哪些单元表【这里可能需要修改，当然如果这里把所有章节都加起来就会全量处理整个表格】
-    my_target_sheets  = ["D1S1"]
-    # 告诉程序基于哪几列的值来判断是否需要隐藏对应行（比如FGH表示如果在一行中FGH列的值都是√或者为空<表示本次不需要听写>，则隐藏该行）
-    # 【这里可能需要修改】
-    my_target_columns = ["F", "H"]
-    # 执行隐藏操作
-    hide_completed_rows(my_excel_file, my_target_sheets, my_target_columns)
+    # 1、【这里可能需要修改】告诉程序操作哪个Excel文件
+    file_to_handle = "Jayden.xlsx"
     
-    # 2、从Excel中导出需要keep的单词列表
-    export_specific_sheets(my_excel_file, my_target_sheets)
+    # 王路语料库：内置sheet名称
+    wanglu_chapter03 = ["3.2","3.3-1", "3.3-2", "3.3-3", "3.3-4", "3.3-5", "3.3-6", "3.3-7", "3.3-8", "3.3-9"]
+    wanglu_chapter04 = ["4.2", "4.3-1", "4.3-2", "4.3-3", "4.4"]
+    wanglu_chapter05 = ["5.2", "5.3-1", "5.3-2", "5.3-3", "5.3-4", "5.3-5", "5.3-6", "5.3-7", "5.3-8", "5.3-9", "5.3-10", "5.3-11", "5.3-12"]
+    wanglu_chapter08 = ["8.2", "8.3-1", "8.3-2", "8.3-3", "8.3-4", "8.3-5", "8.4-1", "8.4-2", "8.4-3", "8.5", "8.6-1", "8.6-2", "8.6-3", "8.7-1", "8.7-2", "8.7-3", "8.8"]
+    wanglu_chapter11 = ["11.1", "11.2", "11.3", "11.4"]
+    wanglu_all_chapters = wanglu_chapter03 + wanglu_chapter04 + wanglu_chapter05 + wanglu_chapter08 + wanglu_chapter11
+    # Jayden语料库：内置sheet名称
+    jayden_d1  = ["D1S1", "D1S2"]
+    jayden_d2  = ["D2S1", "D2S2"]
+    jayden_d3  = ["D3S1", "D3S2"]
+    jayden_d4  = ["D4S1", "D4S2"]
+    jayden_d5  = ["D5S1", "D5S2"]
+    jayden_d6  = ["D6S1", "D6S2"]
+    jayden_d7  = ["D7S1", "D7S2"]
+    jayden_d8  = ["D8S1", "D8S2"]
+    jayden_d9  = ["D9S1", "D9S2"]
+    jayden_d10 = ["D10S1", "D10S2"]
+    jayden_d11 = ["D11S1", "D11S2"]
+    jayden_d12 = ["D12S1", "D12S2"]
+    jayden_d13 = ["D13S1", "D13S2"]
+    jayden_d14 = ["D14S1", "D14S2"]
+    jayden_d15 = ["D15S1", "D15S2"]
+    jayden_d16 = ["D16S1", "D16S2"]
+    jayden_d17 = ["D17S1", "D17S2"]
+    jayden_d18 = ["D18S1", "D18S2"]
+    jayden_d19 = ["D19S1", "D19S2"]
+    jayden_d20 = ["D20S1", "D20S2"]
+    jayden_d21 = ["D21S1", "D21S2"]    
+    # 如果你需要一次性处理所有天数，可以使用这个合并列表
+    jayden_all_sheets = (
+            jayden_d1 + jayden_d2 + jayden_d3 + jayden_d4 + jayden_d5 + jayden_d6 +
+            jayden_d7 + jayden_d8 + jayden_d9 + jayden_d10 + jayden_d11 + jayden_d12 +
+            jayden_d13 + jayden_d14 + jayden_d15 + jayden_d16 + jayden_d17 + jayden_d18 +
+            jayden_d19 + jayden_d20 + jayden_d21
+    )
+    
+    
+    # 【这里可能需要修改】告诉程序需要处理哪些单元表
+    sheets_to_handle  = jayden_d1
+    # 【这里可能需要修改】告诉程序基于哪几列的值来判断是否需要隐藏对应行（比如FGH表示如果在一行中FGH列的值都是√或者为空<表示本次不需要听写>，则隐藏该行）
+    columns_to_handle = ["F", "H"]
+    
+    # 2、行隐藏操作
+    hide_completed_rows(file_to_handle, sheets_to_handle, columns_to_handle)
+    
+    # 3、从Excel中导出需要keep的单词列表
+    export_specific_sheets(file_to_handle, sheets_to_handle)
 
-    # # 3、基于keep单词列表切割mp3
-    # audio_dir = "OriginAudio"
-    # # 检查文件夹是否存在，避免报错
-    # if not os.path.exists(audio_dir):
-    #     print(f"错误：找不到文件夹 '{audio_dir}'")
-    #     return
-    # all_files = os.listdir(audio_dir)
-    # for filename in all_files:
-    #     if not filename.lower().endswith('.mp3'):
-    #         continue
-    #     file_base_name = os.path.splitext(filename)[0]
-    #     if file_base_name not in my_target_sheets:
-    #         continue
-    #     # 拼接完整路径：OriginAudio/文件名.mp3
-    #     full_path = os.path.join(audio_dir, filename)
-    #     print(f"正在处理匹配的文件: {full_path}")
-    #     # 注意：这里需要确保 process_single_unit 函数能接受完整路径
-    #     process_single_unit(full_path)
-    # 3、基于 keep 单词列表切割 mp3
+    # 4、基于 keep 单词列表切割 mp3
     # 检查原始音频文件夹是否存在
     if not os.path.exists(DIR_ORIGIN_AUDIO):
         print(f"❌ 错误：找不到原始音频文件夹 '{DIR_ORIGIN_AUDIO}'")
         return
-
     # 获取文件夹内所有文件
     all_files = os.listdir(DIR_ORIGIN_AUDIO)
-
     # 过滤出需要处理的 MP3
     for filename in all_files:
         # 只处理 .mp3 后缀
         if not filename.lower().endswith('.mp3'):
             continue
-
         file_base_name = os.path.splitext(filename)[0]
-
         # 匹配当前的 Sheet 名称（确保只处理本次指定的章节）
-        if file_base_name not in my_target_sheets:
+        if file_base_name not in sheets_to_handle:
             continue
-
         # 调用处理函数
         process_single_unit(filename)
 
